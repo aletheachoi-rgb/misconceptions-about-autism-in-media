@@ -46,7 +46,7 @@ story_key: "test"
 #    - If running locally: Run `python3 scripts/fetch_google_sheets.py` before building
 google_sheets:
   enabled: true
-  published_url: "https://docs.google.com/spreadsheets/d/e/2PACX-1vT9eeRoyQCr1j-1uDaWBm-rgZNXtn9A-mepL0I4dqDTx2-E_6gbVD-8x0DYDVhppiAzrFpd20_9cr3z/pubhtml"
+  published_url: https://docs.google.com/spreadsheets/d/e/2PACX-1vRmCG7-qDG5dTVpdl0SMw1PCV6vGIW7W-hLKB3rn7spl2WnJCDNfj2aAjaJhuDbvJkOzUiEURjI1eng/pubhtml
 
 #
 #
