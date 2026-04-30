@@ -4,7 +4,7 @@
 # Site Settings
 title: "Autism Misconceptions in Media"
 description: "Looking beyond stereotypes in TV and social media"
-url: "https://aletheachoi.github.io"
+url: "https://aletheachoi-rgb.github.io"
 baseurl: "/misconceptions-about-autism-in-media"
 author: "Ally Choi"
 telar_theme: "santa-barbara" # Options: paisajes, neogranadina, santa-barbara, austin, trama, or custom
@@ -14,7 +14,7 @@ telar_language: "en"
 # Google Sheets Integration
 # See https://telar.org/docs/your-data/google-sheets/ for detailed setup instructions.
 google_sheets:
-  enabled: true
+  enabled: false
   published_url: "https://docs.google.com/spreadsheets/d/e/2PACX-1vRmCG7-qDG5dTVpdl0SMw1PCV6vGIW7W-hLKB3rn7spl2WnJCDNfj2aAjaJhuDbvJkOzUiEURjI1eng/pubhtml"
 
 # Story Interface Settings
