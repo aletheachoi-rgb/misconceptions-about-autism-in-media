@@ -1,0 +1,29 @@
+# Python dependencies for Telar
+# Used by GitHub Actions for data processing and IIIF generation
+
+# Data processing
+pandas>=2.0.0
+pyyaml>=6.0
+markdown>=3.0.0
+jinja2>=3.1.0
+
+# Story encryption (protected stories feature)
+cryptography>=41.0.0
+
+# IIIF tile generation
+iiif>=1.0.0
+
+# Image processing
+Pillow>=10.0.0
+
+# PDF rendering (multi-page PDF objects)
+PyMuPDF>=1.24.0
+
+# HEIC/HEIF support (iPhone photos)
+pillow-heif>=0.13.0
+
+# Testing (development only)
+pytest>=8.0.0
+pytest-cov>=4.0.0
+playwright>=1.40.0
+pytest-playwright>=0.4.0

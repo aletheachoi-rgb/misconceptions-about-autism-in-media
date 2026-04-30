@@ -1,0 +1,56 @@
+<!--
+  Story Step Component
+  Data element for step navigation. Visual cards are created by card-pool.js at runtime.
+  Z-index is now computed by card-pool.js using the banding scheme — not set inline.
+-->
+
+<div class="story-step"
+     data-step="{{ include.step_number }}"
+     data-object="{{ include.object_id }}"
+     data-x="{{ include.x }}"
+     data-y="{{ include.y }}"
+     data-zoom="{{ include.zoom }}"
+     data-region="{{ include.region }}"
+     {% if include.page %}data-page="{{ include.page }}"{% endif %}
+     {% if include.clip_start %}data-clip-start="{{ include.clip_start }}"{% endif %}
+     {% if include.clip_end %}data-clip-end="{{ include.clip_end }}"{% endif %}
+     {% if include.loop %}data-loop="{{ include.loop }}"{% endif %}
+     {% if include.alt_text %}data-alt="{{ include.alt_text }}"{% endif %}>
+
+  <!-- Main content wrapper -->
+  <div class="step-content">
+    <!-- Question (Main Heading) -->
+    <h2 class="step-question">{{ include.question }}</h2>
+
+    <!-- Answer (Main Content) -->
+    <div class="step-answer">
+      {{ include.answer | markdownify }}
+    </div>
+
+    <!-- Viewer Warning (if object or IIIF manifest is missing) -->
+    {% if include.viewer_warning and include.viewer_warning != "" %}
+    <div class="alert alert-warning telar-alert mt-3" role="alert">
+      <strong>⚠️ Image viewer unavailable</strong>
+      <p class="mb-0 mt-2">
+        {{ include.viewer_warning }}<br>
+        Please check <code>telar-content/spreadsheets/objects.csv</code> to ensure the object exists and has a valid IIIF manifest URL.
+      </p>
+    </div>
+    {% endif %}
+
+    <!-- Layer 1 Panel Trigger -->
+    {% if (include.layer1_title and include.layer1_title != "") or (include.layer1_text and include.layer1_text != "") %}
+    <p class="mt-3">
+      <button class="panel-trigger" data-panel="layer1" data-step="{{ include.step_number }}">
+        {% if include.layer1button and include.layer1button != "" %}
+          {{ include.layer1button }}
+        {% else %}
+          Learn more
+        {% endif %} →
+      </button>
+    </p>
+    {% endif %}
+
+    <!-- Layer 2 Panel Trigger: Dynamically added by JavaScript inside layer1 panel -->
+  </div>
+</div>

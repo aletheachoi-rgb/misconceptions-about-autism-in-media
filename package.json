@@ -1,0 +1,18 @@
+{
+  "name": "telar",
+  "private": true,
+  "scripts": {
+    "build:js": "esbuild assets/js/telar-story/main.js --bundle --outfile=assets/js/telar-story.js --format=iife --sourcemap",
+    "test:js": "vitest run",
+    "test:js:watch": "vitest"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.0",
+    "jsdom": "^29.0.1",
+    "vitest": "^4.0.18"
+  },
+  "dependencies": {
+    "@vimeo/player": "^2.30.3",
+    "lenis": "^1.3.19"
+  }
+}

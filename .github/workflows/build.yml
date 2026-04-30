@@ -1,0 +1,346 @@
+name: Build and Deploy Telar Site
+#
+# There are two equally valid ways to build a Telar site: locally on the user's
+# own computer (using scripts/build_local_site.py), or through this GitHub
+# Actions workflow which builds and deploys to GitHub Pages automatically.
+#
+# This workflow runs the full Telar build pipeline:
+#
+#   1. Set up the three runtime environments (Ruby for Jekyll, Python for the
+#      build scripts, Node.js for the JavaScript bundler)
+#   2. Fetch content from Google Sheets (if enabled in _config.yml) — this
+#      downloads the spreadsheet tabs as CSV files into telar-content/spreadsheets/
+#   3. Run csv_to_json.py to process the CSV data into the JSON files that
+#      Jekyll uses to render story pages
+#   4. Run generate_collections.py to turn the markdown texts in
+#      telar-content/texts/ into Jekyll collection files
+#   5. Run search.py to generate search-data.json with facet counts for the
+#      browse-and-search UI on the objects page
+#   6. Process audio objects — generate peak data and clip files for audio
+#      cards (with smart caching — audio is only regenerated when audio files
+#      or objects.csv change)
+#   7. Bundle the JavaScript source modules (assets/js/telar-story/) into a
+#      single file using esbuild
+#   8. Build the Jekyll site
+#   9. Generate IIIF deep-zoom image tiles for self-hosted exhibition objects
+#      (with smart caching — tiles are only regenerated when source images or
+#      objects.csv change)
+#  10. Deploy the built site to GitHub Pages
+#
+# Both the IIIF tile generation and the audio processing include change-detection
+# steps that compare the current commit against the previous one. If only content
+# files changed (not images/audio or objects.csv), the build restores data from
+# the GitHub Actions cache instead of regenerating, which saves significant
+# build time. Sites without audio objects skip audio tool installation and
+# processing entirely — zero friction for image-only sites.
+#
+# Version: v1.0.0-beta
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      force_iiif:
+        description: 'Force IIIF tile regeneration'
+        type: boolean
+        default: true
+      force_audio:
+        description: 'Force audio regeneration'
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.2'
+          bundler-cache: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+
+      - name: Install libvips (for fast IIIF tile generation)
+        run: sudo apt-get install -y libvips-tools
+
+      - name: Install audio processing tools (audiowaveform + ffmpeg)
+        run: |
+          # Only install if audio objects exist (zero friction for image-only sites)
+          if ls telar-content/objects/*.mp3 telar-content/objects/*.ogg telar-content/objects/*.m4a 2>/dev/null | head -1 | grep -q .; then
+            echo "Audio objects detected - installing audiowaveform and ffmpeg"
+            sudo add-apt-repository -y ppa:chris-needham/ppa
+            sudo apt-get update -q
+            sudo apt-get install -y audiowaveform ffmpeg
+          else
+            echo "No audio objects found - skipping audio tool installation"
+          fi
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '20'
+
+      - name: Build JavaScript bundle
+        run: |
+          npm install
+          npm run build:js
+
+      - name: Fetch data from Google Sheets (if enabled)
+        run: |
+          # Check if Google Sheets integration is enabled in _config.yml
+          ENABLED=$(python3 -c "import yaml; config=yaml.safe_load(open('_config.yml')); print(config.get('google_sheets', {}).get('enabled', False))")
+
+          if [ "$ENABLED" = "True" ]; then
+            echo "✓ Google Sheets integration enabled - fetching CSVs..."
+            python3 scripts/fetch_google_sheets.py
+          else
+            echo "✓ Google Sheets integration disabled - using existing CSV files"
+          fi
+
+      - name: Convert CSV to JSON
+        run: |
+          python scripts/csv_to_json.py
+
+      - name: Generate Jekyll collections
+        run: |
+          python scripts/generate_collections.py
+
+      - name: Generate search data
+        run: |
+          python scripts/telar/search.py
+
+      - name: Restore audio data from cache
+        id: cache-audio
+        uses: actions/cache/restore@v5
+        with:
+          path: cached-audio/
+          key: audio-data-${{ hashFiles('telar-content/objects/*.mp3', 'telar-content/objects/*.ogg', 'telar-content/objects/*.m4a', 'telar-content/spreadsheets/objects.csv') }}
+
+      - name: Detect if audio regeneration is needed
+        id: detect-audio-changes
+        run: |
+          NEEDS_AUDIO="true"
+
+          # Check if any audio objects exist first
+          if ! ls telar-content/objects/*.mp3 telar-content/objects/*.ogg telar-content/objects/*.m4a 2>/dev/null | head -1 | grep -q .; then
+            echo "No audio objects found - skipping audio processing"
+            NEEDS_AUDIO="false"
+          elif [ "${{ github.event_name }}" = "push" ]; then
+            if git rev-parse HEAD~1 >/dev/null 2>&1; then
+              CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD)
+
+              if echo "$CHANGED_FILES" | grep -qE '^telar-content/spreadsheets/objects\.csv$'; then
+                echo "objects.csv changed - audio regeneration needed"
+                NEEDS_AUDIO="true"
+              elif echo "$CHANGED_FILES" | grep -qE '^telar-content/objects/.*\.(mp3|ogg|m4a)$'; then
+                echo "Audio files changed - regeneration needed"
+                NEEDS_AUDIO="true"
+              else
+                echo "No audio-related changes - skipping audio regeneration"
+                NEEDS_AUDIO="false"
+              fi
+            else
+              echo "First commit - running full audio processing"
+              NEEDS_AUDIO="true"
+            fi
+          else
+            echo "Manual trigger - using input parameter (force_audio=${{ inputs.force_audio }})"
+            NEEDS_AUDIO="${{ inputs.force_audio }}"
+          fi
+
+          echo "needs_audio=$NEEDS_AUDIO" >> $GITHUB_OUTPUT
+          echo "Audio regeneration: $NEEDS_AUDIO"
+
+      - name: Process audio objects (peaks + clips)
+        if: steps.detect-audio-changes.outputs.needs_audio == 'true'
+        run: |
+          python scripts/process_audio.py \
+            --objects-dir telar-content/objects \
+            --data-dir _data \
+            --output-dir assets/audio
+
+      - name: Copy audio data to cache directory
+        if: steps.detect-audio-changes.outputs.needs_audio == 'true'
+        run: |
+          if [ -d "assets/audio" ] && [ "$(ls -A assets/audio/peaks 2>/dev/null)" ]; then
+            echo "Copying audio data to cache directory for future builds"
+            mkdir -p cached-audio
+            cp -r assets/audio/* cached-audio/
+          else
+            echo "No audio data to cache"
+          fi
+
+      - name: Save audio data to cache
+        if: steps.detect-audio-changes.outputs.needs_audio == 'true'
+        uses: actions/cache/save@v5
+        with:
+          path: cached-audio/
+          key: audio-data-${{ hashFiles('telar-content/objects/*.mp3', 'telar-content/objects/*.ogg', 'telar-content/objects/*.m4a', 'telar-content/spreadsheets/objects.csv') }}
+
+      - name: Restore audio data from cache (when skipping regeneration)
+        if: steps.detect-audio-changes.outputs.needs_audio == 'false'
+        run: |
+          if [ -d "cached-audio" ] && [ "$(ls -A cached-audio)" ]; then
+            echo "Restoring audio data from cache"
+            mkdir -p assets/audio
+            cp -r cached-audio/* assets/audio/
+            echo "Audio data restored successfully"
+          else
+            echo "No cached audio data found (expected for sites without audio objects)"
+          fi
+
+      - name: Build Jekyll site
+        run: |
+          bundle exec jekyll build
+
+      - name: Restore IIIF tiles from cache
+        id: cache-iiif
+        uses: actions/cache/restore@v5
+        with:
+          path: cached-iiif/
+          # v0.5.0: Flattened image directory structure - now all images in telar-content/objects/
+          key: iiif-tiles-${{ hashFiles('telar-content/objects/**') }}
+
+      - name: Detect if IIIF regeneration is needed
+        id: detect-changes
+        run: |
+          # Failsafe: Default to regenerating IIIF (safe default)
+          NEEDS_IIIF="true"
+
+          # Only attempt detection for push events (not manual triggers)
+          if [ "${{ github.event_name }}" = "push" ]; then
+            # Check if this is the first commit (no previous commit to compare)
+            if git rev-parse HEAD~1 >/dev/null 2>&1; then
+              # Get list of changed files
+              CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD)
+
+              # Check if any images, objects.csv, or _config.yml changed
+              # Note: _config.yml added in v0.4.3 - IIIF tiles embed base URL from config (thanks Tara)
+              # v0.5.0: CSV-aware image monitoring - only triggers for images matching object_ids
+
+              # Always regenerate if objects.csv or _config.yml changed
+              if echo "$CHANGED_FILES" | grep -qE '^telar-content/spreadsheets/objects\.csv$|^_config\.yml$'; then
+                echo "✓ objects.csv or _config.yml changed - IIIF regeneration needed"
+                NEEDS_IIIF="true"
+              # Check if any images changed
+              elif echo "$CHANGED_FILES" | grep -q '^telar-content/objects/'; then
+                echo "✓ Image files changed - checking if they match objects in CSV..."
+
+                # Get list of object IDs from objects.csv (skip header row)
+                OBJECT_IDS=$(tail -n +2 telar-content/spreadsheets/objects.csv | cut -d',' -f1)
+
+                # Get list of changed images (extract filenames, remove path and extension)
+                CHANGED_IMAGES=$(echo "$CHANGED_FILES" | grep '^telar-content/objects/' | sed 's|.*/||' | sed 's/\.[^.]*$//')
+
+                # Check if any changed image matches an object ID
+                MATCH_FOUND="false"
+                for img in $CHANGED_IMAGES; do
+                  if echo "$OBJECT_IDS" | grep -qx "$img"; then
+                    echo "  - Image '$img' matches object ID in objects.csv"
+                    MATCH_FOUND="true"
+                  fi
+                done
+
+                if [ "$MATCH_FOUND" = "true" ]; then
+                  echo "✓ Changed images match objects in CSV - IIIF regeneration needed"
+                  NEEDS_IIIF="true"
+                else
+                  echo "✓ Changed images don't match any objects in CSV - skipping IIIF regeneration"
+                  NEEDS_IIIF="false"
+                fi
+              else
+                echo "✓ Only content files changed - skipping IIIF regeneration"
+                NEEDS_IIIF="false"
+              fi
+            else
+              echo "✓ First commit - running full build with IIIF"
+              NEEDS_IIIF="true"
+            fi
+          else
+            echo "✓ Manual trigger - using input parameter (force_iiif=${{ inputs.force_iiif }})"
+            NEEDS_IIIF="${{ inputs.force_iiif }}"
+          fi
+
+          echo "needs_iiif=$NEEDS_IIIF" >> $GITHUB_OUTPUT
+          echo "IIIF regeneration: $NEEDS_IIIF"
+
+      - name: Generate IIIF tiles into _site
+        if: steps.detect-changes.outputs.needs_iiif == 'true'
+        run: |
+          # v0.5.0: Check if source images directory exists (flattened structure)
+          if [ -d "telar-content/objects" ]; then
+            # Extract URL and baseurl from _config.yml
+            SITE_URL=$(python3 -c "import yaml; config=yaml.safe_load(open('_config.yml')); print(config.get('url', ''))")
+            BASE_URL=$(python3 -c "import yaml; config=yaml.safe_load(open('_config.yml')); print(config.get('baseurl', ''))")
+            FULL_URL="${SITE_URL}${BASE_URL}"
+
+            echo "Generating IIIF tiles with base URL: $FULL_URL"
+
+            # v0.5.0: Removed --source-dir parameter (script now defaults to telar-content/objects/)
+            # v0.5.0: Script is now CSV-driven - only processes objects listed in objects.json
+            python scripts/generate_iiif.py \
+              --output-dir _site/iiif/objects \
+              --base-url "$FULL_URL"
+          else
+            echo "No telar-content/objects directory found. Skipping IIIF generation."
+          fi
+
+      - name: Copy generated IIIF tiles to cache directory
+        if: steps.detect-changes.outputs.needs_iiif == 'true'
+        run: |
+          if [ -d "_site/iiif/objects" ] && [ "$(ls -A _site/iiif/objects 2>/dev/null)" ]; then
+            echo "✓ Copying IIIF tiles to cache directory for future builds"
+            mkdir -p cached-iiif
+            cp -r _site/iiif/objects/* cached-iiif/
+          else
+            echo "No IIIF tiles to cache (directory empty or missing)"
+          fi
+
+      - name: Save IIIF tiles to cache
+        if: steps.detect-changes.outputs.needs_iiif == 'true'
+        uses: actions/cache/save@v5
+        with:
+          path: cached-iiif/
+          # v0.5.0: Flattened image directory structure
+          key: iiif-tiles-${{ hashFiles('telar-content/objects/**') }}
+
+      - name: Restore IIIF tiles from cache to _site (when skipping regeneration)
+        if: steps.detect-changes.outputs.needs_iiif == 'false'
+        run: |
+          if [ -d "cached-iiif" ] && [ "$(ls -A cached-iiif)" ]; then
+            echo "✓ Restoring IIIF tiles from cache"
+            mkdir -p _site/iiif/objects
+            cp -r cached-iiif/* _site/iiif/objects/
+            echo "✓ IIIF tiles restored successfully"
+          else
+            echo "⚠️  Warning: No cached IIIF tiles found. Site may have missing images."
+            echo "⚠️  Run a full build with IIIF regeneration to create tiles."
+          fi
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: _site
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5

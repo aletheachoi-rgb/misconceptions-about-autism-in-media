@@ -1,0 +1,1213 @@
+/**
+ * Story Layout
+ *
+ * Full-viewport card-stack layout for Telar story pages. Viewer plates fill
+ * the entire viewport as backgrounds; text cards float over them on the left.
+ * All transitions are pure CSS slide animations — no fading, no opacity changes.
+ *
+ * Card-stack architecture introduced in v1.0.0-beta.
+ *
+ * Preserved: mobile navigation buttons, btn-home, story unlock overlay,
+ * embed-mode styles, and height-based responsive tiers.
+ *
+ * @version v1.2.0
+ */
+
+// ── Story Viewport ────────────────────────────────────────────────────────────
+
+.story-container {
+  position: fixed;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background: #000;
+  // NO display:flex — no longer a column layout
+}
+
+// ── Scroll Surface ────────────────────────────────────────────────────────────
+
+// Transparent scrollable element that gives Lenis real DOM overflow to measure.
+// Height set by JS: stepCount * window.innerHeight. The browser scrolls this;
+// Lenis smooths it; the card-stack reads animatedScroll per-frame.
+.scroll-surface {
+  position: relative;
+  width: 1px;
+  pointer-events: none;
+  // height set by JS — creates real document overflow for Lenis
+}
+
+// ── Card Stack ────────────────────────────────────────────────────────────────
+
+.card-stack {
+  position: absolute;
+  inset: 0;
+  // CRITICAL: NO z-index here — mandatory for z-index banding to work
+  overflow: visible;
+
+  // During scroll-driven scrubbing: disable CSS transitions for per-frame control
+  &.is-scrubbing .viewer-plate,
+  &.is-scrubbing .text-card {
+    transition: none;
+  }
+
+  &.is-scrubbing .title-card {
+    transition: none;
+  }
+}
+
+// ── Viewer Plate ──────────────────────────────────────────────────────────────
+
+// Full-viewport IIIF viewer background. One per unique object.
+.viewer-plate {
+  position: absolute;
+  inset: 0;
+  box-sizing: border-box;
+  transform: translateY(100%);                    // offscreen below by default
+  transition: transform 0.5s ease-out;           // pure slide, no fade
+  // Top-edge shadow and border matching text cards (visible during slide-up)
+  box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.15), 0 -6px 24px rgba(0, 0, 0, 0.12);
+  border-top: 1px solid rgba(0, 0, 0, 0.1);
+
+  &.is-active {
+    transform: translateY(0);
+  }
+
+  // Tify viewer container must fill the plate
+  .viewer-instance {
+    width: 100%;
+    height: 100%;
+  }
+
+  // Replace Tify's dot-grid and OSD black with the Telar weave pattern
+  .viewer-instance .tify {
+    background: #fff url('../img/background-gris.svg') repeat !important;
+    background-size: 20px auto !important;
+  }
+  .viewer-instance .openseadragon-container {
+    background: transparent !important;
+  }
+  // Shadow around the image, cast onto the weave pattern background
+  .viewer-instance .openseadragon-canvas canvas {
+    filter: drop-shadow(0 4px 16px rgba(0, 0, 0, 0.35));
+  }
+
+
+  // Loading shimmer while the IIIF viewer initialises
+  &[data-loading]::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, #1a1a1a 25%, #2a2a2a 50%, #1a1a1a 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+    z-index: 1;
+    pointer-events: none;
+  }
+}
+
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position:  200% 0; }
+}
+
+// ── Video plates ─────────────────────────────────────────────────────────────
+
+// Video plate: light surround background, iframe with rounded corners
+// and shadow, clip-end dim overlay. Auto-layout positions the iframe via JS.
+.viewer-plate.video-plate {
+  background: #fff url('../img/background-gris.svg') repeat;  // Telar weave pattern (same as IIIF plates)
+  background-size: 20px auto;
+
+  .video-iframe {
+    border-radius: 4px;  // rounded corners
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.25);  // subtle shadow
+    border: none;
+    overflow: hidden;  // clip child iframe to border-radius
+
+    // Vimeo SDK creates an iframe inside the container div (unlike YouTube
+    // which replaces it). Ensure it fills the positioned container.
+    iframe {
+      width: 100%;
+      height: 100%;
+      border: none;
+    }
+  }
+
+  .clip-end-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.35);  // semi-transparent dim
+    border-radius: 4px;
+    opacity: 0;
+    transition: opacity 300ms ease-in;  // fade-in over 300ms
+    pointer-events: none;
+
+    &.visible {
+      opacity: 1;
+    }
+  }
+}
+
+// ── Audio plates ─────────────────────────────────────────────────────────────
+
+// Audio plate: solid opaque background with telar weave pattern.
+// Background + pattern set dynamically by audio-card.js from --color-link.
+.viewer-plate.audio-plate {
+  // background applied inline by audio-card.js
+}
+
+.waveform-container {
+  position: absolute;
+  top: 50%;
+  left: 41%;
+  width: 59%;
+  transform: translateY(-50%);
+  pointer-events: none; // display-only
+  z-index: 1; // above telar weave pattern (CSS background)
+}
+
+.audio-controls {
+  position: absolute;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  bottom: calc(25% - 48px);
+  right: calc(40% + 16px);
+}
+
+.audio-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  color: rgba(0, 0, 0, 0.7);
+  background: rgba(255, 255, 255, 0.6);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
+  transition: background 0.15s ease, transform 0.15s ease;
+
+  svg {
+    flex-shrink: 0;
+  }
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.85);
+    transform: scale(1.08);
+  }
+
+  &:active {
+    transform: scale(0.95);
+  }
+
+  &:focus-visible {
+    outline: 2px solid rgba(255, 255, 255, 0.5);
+    outline-offset: 2px;
+  }
+
+}
+
+.audio-elapsed {
+  position: absolute;
+  z-index: 1;
+  font-size: 0.8rem;
+  color: rgba(0, 0, 0, 0.7);
+  background: rgba(255, 255, 255, 0.6);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  border-radius: 20px;
+  padding: 0.4rem 0.85rem;
+  pointer-events: none;
+  bottom: calc(25% - 48px);
+  right: 16px;
+}
+
+.audio-play-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1;
+
+  button {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.9);
+    border: none;
+    font-size: 2rem;
+    color: var(--color-link);
+    cursor: pointer;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.2);
+    transition: background 0.15s ease;
+
+    &:hover {
+      background: rgba(255, 255, 255, 1);
+    }
+
+    &:focus-visible {
+      outline: 2px solid rgba(255, 255, 255, 0.5);
+      outline-offset: 2px;
+    }
+  }
+
+  &.hidden {
+    display: none;
+  }
+}
+
+.video-play-overlay {
+  pointer-events: auto;
+
+  button:hover {
+    background: rgba(255, 255, 255, 0.85) !important;
+  }
+
+  button:focus-visible {
+    outline: 2px solid var(--color-link);
+    outline-offset: 2px;
+  }
+}
+
+// ── Alerts inside viewer plates (e.g. audio load errors) ────────────────────
+.viewer-plate .telar-alert {
+  position: absolute;
+  z-index: 2;
+  text-align: center;
+  // Desktop: centre in the right 60% (visible area beside the text card)
+  top: 50%;
+  left: 70%;
+  transform: translate(-50%, -50%);
+  width: 50%;
+  max-width: 400px;
+}
+
+.audio-clip-end-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.25);
+  opacity: 0;
+  transition: opacity 300ms ease-in;
+  pointer-events: none;
+
+  &.visible {
+    opacity: 1;
+  }
+}
+
+@media (max-width: 768px) {
+  .audio-btn {
+    min-width: 44px;
+    min-height: 44px;
+    font-size: 1.1rem;
+  }
+
+  .audio-controls {
+    right: 16px;
+    bottom: calc(25% - 56px);
+  }
+
+  .audio-elapsed {
+    right: 16px;
+    bottom: calc(25% - 56px);
+  }
+}
+
+// ── Text Card ─────────────────────────────────────────────────────────────────
+
+// Floating card over the viewer. Left-aligned at 4%, 42% wide.
+.text-card {
+  position: absolute;
+  left: 3%;
+  width: 37%;
+  // height set by JS: viewportH * 0.85
+  // top set by JS: centred + peek offset
+  background: #fff;
+  border-radius: 3px;
+  border: none;
+  padding: 1.5rem 2rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  pointer-events: auto;
+  transform: translateY(100vh);          // offscreen below by default
+  transition: transform 0.5s ease-out;
+  // Base shadow — cards always look like cards, not flat divs
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15), 0 6px 24px rgba(0, 0, 0, 0.12), 0 0 0 0.5px rgba(0, 0, 0, 0.1);
+
+  // Active card — stronger shadow
+  &.is-active {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2), 0 8px 30px rgba(0, 0, 0, 0.18), 0 0 0 0.5px rgba(0, 0, 0, 0.12);
+  }
+
+  // Peeked/stacked card — lighter shadow
+  &.is-stacked {
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 3px 10px rgba(0, 0, 0, 0.1), 0 0 0 0.5px rgba(0, 0, 0, 0.08);
+  }
+
+  .step-question {
+    font-family: var(--font-headings);
+    font-size: 1.5rem;
+    line-height: 1.2;
+    color: var(--color-heading);
+    margin-bottom: 0.75rem;
+  }
+
+  .step-answer {
+    font-size: 1rem;
+    line-height: 1.6;
+    color: var(--color-body);
+    overflow-y: auto;  // scroll for long text
+    flex: 1;
+  }
+
+  .step-actions {
+    margin-top: 1.25rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .panel-trigger {
+    padding: 0.5rem 1.25rem;
+    background: var(--color-button-bg);
+    color: var(--color-button-text);
+    font-weight: 600;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    align-self: flex-start;
+    border: none;
+    cursor: pointer;
+    transition: opacity 0.2s ease;
+
+    &:hover {
+      opacity: 0.85;
+    }
+  }
+}
+
+// ── Story Intro ───────────────────────────────────────────────────────────────
+
+// Full-viewport intro with floating card. z-index:0, covered by first viewer plate.
+.story-intro {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background: #f5f7fa;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.5s ease-out;  // slides away via translateY(-120vh)
+}
+
+.intro-vignette {
+  display: none;  // not used in full-screen text mode
+}
+
+.intro-floating-card {
+  text-align: center;
+  max-width: 550px;
+  width: 90%;
+  padding: 2.5rem 3rem;
+
+  .intro-title {
+    font-family: var(--font-headings);
+    font-size: 2.5rem;
+    font-weight: 700;
+    color: var(--color-primary);
+    line-height: 1.2;
+    margin-bottom: 0.5rem;
+  }
+
+  .intro-subtitle {
+    font-family: var(--font-headings);
+    font-size: 1.25rem;
+    font-weight: 400;
+    color: var(--color-heading);
+    margin-bottom: 0.75rem;
+  }
+
+  .intro-demo-label {
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: var(--color-accent, #6c757d);
+    margin-bottom: 0.5rem;
+  }
+
+  .intro-byline {
+    font-size: 1rem;
+    color: #5a6c7d;
+    margin-bottom: 0.75rem;
+    font-weight: 400;
+  }
+
+  .intro-description {
+    font-size: 1.1rem;
+    color: #5a6c7d;
+    margin-bottom: 1.5rem;
+    line-height: 1.6;
+  }
+
+  .intro-hint {
+    margin-top: 1.5rem;
+    font-size: 0.9rem;
+    color: #9aabbf;
+  }
+
+  // Responsive hint text
+  .hint-mobile {
+    display: none;
+  }
+
+  @media (max-width: 768px) {
+    .hint-desktop {
+      display: none;
+    }
+    .hint-mobile {
+      display: inline;
+    }
+  }
+
+  // Alert/warning block within intro
+  .alert {
+    text-align: left;
+    font-size: 0.9rem;
+  }
+}
+
+// ── TOC-enabled title card ────────────────────────────────────────────────────
+// When show_sections is enabled, the intro card uses the layer 2 panel colour.
+
+.story-intro--toc {
+  background: var(--color-panel-layer2-bg);
+  padding-top: 100px;
+
+  .intro-floating-card {
+    .intro-title {
+      color: var(--color-panel-layer2-text);
+    }
+
+    .intro-subtitle,
+    .intro-byline,
+    .intro-description {
+      color: var(--color-panel-layer2-text);
+      opacity: 0.85;
+    }
+
+    .intro-demo-label {
+      color: var(--color-panel-layer2-text);
+      opacity: 0.7;
+    }
+
+    .intro-hint {
+      color: var(--color-panel-layer2-text);
+      opacity: 0.5;
+    }
+  }
+}
+
+.intro-toc {
+  margin-top: 3.5rem;
+  text-align: center;
+
+  .intro-toc-heading {
+    font-family: var(--font-headings);
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    color: var(--color-panel-layer2-text);
+    opacity: 0.5;
+    margin-bottom: 0.75rem;
+  }
+
+  ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+
+  li {
+    margin-bottom: 0.4rem;
+  }
+
+  .intro-toc-link {
+    color: var(--color-panel-layer2-text);
+    text-decoration: none;
+    font-family: var(--font-headings);
+    font-size: 1.05rem;
+    font-weight: 500;
+    opacity: 0.8;
+    transition: opacity 0.2s;
+
+    &:hover {
+      opacity: 1;
+      text-decoration: underline;
+    }
+  }
+}
+
+// ── Title cards ───────────────────────────────────────────────────────────────
+// Full-viewport chapter heading dividers, visually identical to the story
+// intro card. Each title card is its own scene in the card pool.
+
+.title-card {
+  position: absolute;
+  inset: 0;
+  background: #f5f7fa;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform: translateY(100vh);
+  transition: transform 0.5s ease-out;
+
+  .title-card-inner {
+    text-align: center;
+    max-width: 550px;
+    width: 90%;
+    padding: 2.5rem 3rem;
+  }
+
+  .title-card-heading {
+    font-family: var(--font-headings);
+    font-size: 2.5rem;
+    font-weight: 700;
+    color: var(--color-primary);
+    line-height: 1.2;
+    margin-bottom: 0.5rem;
+  }
+
+  .title-card-body {
+    font-size: 1.1rem;
+    color: #5a6c7d;
+    line-height: 1.6;
+  }
+
+  &.is-active {
+    transform: translateY(0);
+  }
+
+  &.is-stacked {
+    transform: translateY(0);
+  }
+}
+
+// ── Back to Home Button ───────────────────────────────────────────────────────
+
+// Fixed above the card-stack. High z-index to float above all cards.
+.btn-nav-back {
+  position: fixed !important;
+  top: 0.75rem !important;
+  left: 0.75rem !important;
+  text-decoration: none;
+  color: rgba(0, 0, 0, 0.7);
+  padding: 0.5rem 1rem;
+  min-width: 9rem;
+  justify-content: center;
+  border: none;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.6);
+  backdrop-filter: blur(4px);
+  transition: background 0.3s ease, color 0.3s ease;
+  z-index: 9900 !important;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.85);
+    color: rgba(0, 0, 0, 0.9);
+  }
+}
+
+// Icons hidden on desktop — text only
+.btn-nav-icon { display: none; }
+
+// ── Step Counter ─────────────────────────────────────────────────────────────
+
+.step-counter {
+  position: fixed;
+  top: 0.75rem;
+  right: 0.75rem;
+  padding: 0.4rem 0.85rem;
+  background: rgba(255, 255, 255, 0.6);
+  color: rgba(0, 0, 0, 0.7);
+  border-radius: 20px;
+  font-size: 0.8rem;
+  z-index: 9900;
+  pointer-events: none;
+  backdrop-filter: blur(4px);
+}
+
+// ── Object Credits Badge ─────────────────────────────────────────────────────
+
+.object-credits-badge {
+  position: fixed;
+  bottom: 0.75rem;
+  right: 0.75rem;
+  padding: 0.4rem 0.85rem;
+  background: rgba(255, 255, 255, 0.6);
+  color: rgba(0, 0, 0, 0.7);
+  border-radius: 20px;
+  font-size: 0.75rem;
+  z-index: 9900;
+  pointer-events: auto;
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  max-width: calc(100% - 2rem);
+}
+
+.credits-dismiss-btn {
+  background: none;
+  border: none;
+  color: rgba(0, 0, 0, 0.5);
+  font-size: 1.1rem;
+  line-height: 1;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  transition: opacity 0.2s;
+  flex-shrink: 0;
+
+  &:hover {
+    color: rgba(255, 255, 255, 1);
+  }
+}
+
+// ── Step Indicator Toggle ─────────────────────────────────────────────────────
+
+.hide-step-indicators .step-indicator {
+  display: none !important;
+}
+
+// ── Mobile Navigation Buttons ─────────────────────────────────────────────────
+
+// Button-only navigation for viewports < 768px and embed mode.
+// Fixed to the right side, centred vertically over the full viewport.
+
+@media (max-width: 768px) {
+  .mobile-nav {
+    position: fixed;
+    right: 1rem;
+    bottom: 50%;
+    transform: translateY(50%);
+    z-index: 9900;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .mobile-nav button {
+    width: 66px;
+    height: 66px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.95);
+    border: 2px solid rgba(0, 0, 0, 0.1);
+    color: #333;
+    font-size: 1.875rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    &:hover:not(:disabled) {
+      background: rgba(255, 255, 255, 1);
+      transform: scale(1.05);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    }
+
+    &:disabled {
+      opacity: 0.3;
+      cursor: not-allowed;
+    }
+  }
+
+  // Mobile nav button — icon-only circular button
+  .btn-nav-back {
+    min-height: 44px;
+    min-width: 44px;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    border-radius: 50%;
+    top: 1rem !important;
+    left: 1rem !important;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.95);
+    border: 2px solid rgba(0, 0, 0, 0.1);
+    color: #333;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  }
+
+  .btn-nav-text {
+    display: none;
+  }
+
+  .btn-nav-icon {
+    display: none;
+  }
+  .btn-nav-back.is-home .btn-nav-icon--home,
+  .btn-nav-back.is-start .btn-nav-icon--start {
+    display: block !important;
+    font-size: 1.5rem;
+  }
+
+  .step-counter {
+    font-size: 0.7rem;
+    padding: 0.3rem 0.7rem;
+    right: auto;
+    left: 50%;
+    transform: translateX(-50%);
+  }
+
+  .object-credits-badge {
+    font-size: 0.65rem;
+    padding: 0.3rem 0.6rem;
+    max-width: calc(100% - 1rem);
+    bottom: 0.5rem;
+    right: 0.5rem;
+  }
+
+  #object-credits-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: calc(100vw - 5rem);
+  }
+
+  // ── Mobile text card: full-width bottom-anchored card ──────────────────────
+  .text-card {
+    left: 1rem;
+    width: calc(100% - 2rem);
+    top: auto !important;   // Override JS inline top assignment
+    bottom: 1rem;
+    max-height: 40vh;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    transition: transform 0.4s ease-out;  // Slightly faster than desktop 0.5s
+  }
+
+  // Per-card-type height — video/audio need less space for controls
+  .viewer-plate[data-card-type="youtube"] + .text-card,
+  .viewer-plate[data-card-type="vimeo"] + .text-card,
+  .viewer-plate[data-card-type="google-drive"] + .text-card,
+  .viewer-plate[data-card-type="audio"] + .text-card {
+    max-height: 35vh;
+  }
+
+  // Same shadow tokens as desktop but ensure they apply on mobile
+  .text-card.is-active {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2), 0 8px 30px rgba(0, 0, 0, 0.18), 0 0 0 0.5px rgba(0, 0, 0, 0.12);
+  }
+
+  // ── Mobile audio: centre waveform in the visible area above the card ────────
+  .waveform-container {
+    left: 5%;
+    width: 90%;
+    // Centre vertically in the top 60% (above the 35vh text card)
+    top: 27%;
+    transform: translateY(-50%);
+  }
+
+  .audio-controls {
+    // Centre controls horizontally, well above the text card + nav buttons
+    right: auto;
+    left: 50%;
+    transform: translateX(-50%);
+    bottom: calc(35vh + 5rem);
+  }
+
+  .audio-play-overlay {
+    // Hide on mobile — the controls row already has a play button
+    display: none !important;
+  }
+
+  // Mobile: centre alert in visible area above the bottom card
+  .viewer-plate .telar-alert {
+    left: 50%;
+    width: calc(100% - 4rem);
+    top: 25%;
+  }
+
+}
+
+// ── Height-Based Responsive Tiers for Small Mobile Screens ───────────────────
+
+// Tier 1: Small Mobile — phones with 700px or less height
+@media (max-width: 768px) and (max-height: 700px) {
+  .text-card {
+    padding: 1.3rem !important;
+
+    .step-question {
+      font-size: 1.35rem;
+      margin-bottom: 0.65rem;
+    }
+
+    .step-answer {
+      font-size: 0.95rem;
+    }
+  }
+
+  .panel-trigger {
+    font-size: 0.85rem;
+    padding: 0.45rem 1.1rem;
+  }
+}
+
+// Tier 2: Tiny Mobile — phones with 667px or less height (iPhone SE)
+@media (max-width: 768px) and (max-height: 667px) {
+  .text-card {
+    padding: 1.2rem !important;
+
+    .step-question {
+      font-size: 1.25rem;
+      margin-bottom: 0.6rem;
+    }
+
+    .step-answer {
+      font-size: 0.9rem;
+    }
+  }
+
+  .panel-trigger {
+    font-size: 0.8rem;
+    padding: 0.4rem 1rem;
+  }
+
+  .mobile-nav button {
+    width: 45px !important;
+    height: 45px !important;
+  }
+}
+
+// Tier 3: Micro Mobile — very small Android phones with 600px or less height
+@media (max-width: 768px) and (max-height: 600px) {
+  .text-card {
+    padding: 1rem !important;
+
+    .step-question {
+      font-size: 1.1rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .step-answer {
+      font-size: 0.85rem;
+    }
+  }
+
+  .panel-trigger {
+    font-size: 0.75rem;
+    padding: 0.35rem 0.9rem;
+  }
+
+  .mobile-nav button {
+    width: 45px !important;
+    height: 45px !important;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// STORY UNLOCK OVERLAY (v0.8.0 - Protected Stories)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+.story-unlock-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 99999;
+  opacity: 0;
+  transition: opacity 0.4s ease;
+  background: var(--color-panel-layer2-bg, #3d2645);
+
+  &.show {
+    opacity: 1;
+
+    .unlock-content {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .unlock-icon {
+      opacity: 1;
+      transform: scale(1);
+      transition-delay: 0.1s;
+    }
+
+    .unlock-title {
+      opacity: 1;
+      transform: translateY(0);
+      transition-delay: 0.2s;
+    }
+
+    .unlock-description {
+      opacity: 1;
+      transform: translateY(0);
+      transition-delay: 0.3s;
+    }
+
+    .unlock-form {
+      opacity: 1;
+      transform: translateY(0);
+      transition-delay: 0.4s;
+    }
+
+    .unlock-back-link {
+      opacity: 1;
+      transition-delay: 0.5s;
+    }
+  }
+
+  &.success .unlock-icon svg {
+    animation: unlock-success 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  }
+}
+
+.unlock-content {
+  position: relative;
+  text-align: center;
+  padding: 3rem 2.5rem;
+  max-width: 420px;
+  color: #f5f0e8;
+  opacity: 0;
+  transform: translateY(10px);
+  transition: opacity 0.4s ease, transform 0.4s ease;
+}
+
+.unlock-icon {
+  margin-bottom: 2rem;
+  opacity: 0;
+  transform: scale(0.9);
+  transition: opacity 0.5s ease, transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  svg {
+    width: 144px;
+    height: 216px;
+  }
+}
+
+.unlock-title {
+  font-family: var(--font-headings);
+  font-size: 2rem;
+  font-weight: 400;
+  letter-spacing: 0.02em;
+  margin-bottom: 1rem;
+  color: #f5f0e8;
+  opacity: 0;
+  transform: translateY(10px);
+  transition: opacity 0.4s ease, transform 0.4s ease;
+}
+
+.unlock-description {
+  font-family: var(--font-body);
+  font-size: 1.05rem;
+  font-weight: 300;
+  line-height: 1.7;
+  margin-bottom: 2.5rem;
+  color: rgba(245, 240, 232, 0.75);
+  opacity: 0;
+  transform: translateY(10px);
+  transition: opacity 0.4s ease, transform 0.4s ease;
+}
+
+.unlock-form {
+  margin-bottom: 2rem;
+  opacity: 0;
+  transform: translateY(10px);
+  transition: opacity 0.4s ease, transform 0.4s ease;
+
+  .input-group {
+    display: flex;
+    margin-bottom: 1.25rem;
+    border-radius: 50px;
+    overflow: hidden;
+
+    input {
+      flex: 1;
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      border-right: none;
+      border-radius: 50px 0 0 50px;
+      color: #fff;
+      padding: 0.875rem 1.5rem;
+      font-family: var(--font-body);
+      font-size: 1rem;
+      font-weight: 300;
+      transition: all 0.25s ease;
+
+      &::placeholder {
+        color: rgba(255, 255, 255, 0.5);
+      }
+
+      &:focus {
+        outline: none;
+        background: rgba(255, 255, 255, 0.15);
+        border-color: rgba(255, 255, 255, 0.4);
+      }
+    }
+
+    button {
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      border-left: none;
+      border-radius: 0 50px 50px 0;
+      color: rgba(255, 255, 255, 0.6);
+      padding: 0 1.25rem;
+      cursor: pointer;
+      transition: all 0.25s ease;
+
+      &:hover {
+        background: rgba(255, 255, 255, 0.15);
+        color: rgba(255, 255, 255, 0.9);
+      }
+
+      i {
+        font-size: 1.1rem;
+      }
+    }
+  }
+
+  &.shake {
+    animation: shake 0.5s cubic-bezier(0.36, 0.07, 0.19, 0.97);
+  }
+}
+
+.unlock-error {
+  color: #f8d7da;
+  background: rgba(220, 53, 69, 0.3);
+  padding: 0.75rem 1.25rem;
+  border-radius: 50px;
+  font-size: 0.9rem;
+  margin-bottom: 1.25rem;
+}
+
+.unlock-button {
+  width: 100%;
+  padding: 0.875rem 2rem;
+  font-family: var(--font-body);
+  font-size: 1rem;
+  font-weight: 500;
+  border: none;
+  border-radius: 50px;
+  cursor: pointer;
+  background: var(--color-button-bg);
+  color: var(--color-button-text);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  }
+
+  &:active {
+    transform: translateY(0);
+  }
+}
+
+.unlock-back-link {
+  display: inline-block;
+  color: rgba(245, 240, 232, 0.5);
+  font-family: var(--font-body);
+  font-size: 0.9rem;
+  font-weight: 300;
+  text-decoration: none;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  transition: all 0.25s ease;
+  opacity: 0;
+
+  &:hover {
+    color: rgba(245, 240, 232, 0.85);
+    background: rgba(245, 240, 232, 0.05);
+  }
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  10%, 50%, 90% { transform: translateX(-8px); }
+  30%, 70% { transform: translateX(8px); }
+}
+
+@keyframes unlock-success {
+  0%   { transform: scale(1); }
+  30%  { transform: scale(1.15) rotate(-5deg); }
+  60%  { transform: scale(1.1) rotate(3deg); }
+  100% { transform: scale(1); opacity: 0.6; }
+}
+
+// ── Mobile Responsive — Compact Unlock Overlay ───────────────────────────────
+
+@media (max-width: 768px) {
+  .unlock-content {
+    padding: 2rem 1.5rem;
+    max-width: 90%;
+  }
+
+  .unlock-icon svg {
+    width: 120px;
+    height: 180px;
+  }
+
+  .unlock-title {
+    font-size: 1.6rem;
+  }
+
+  .unlock-description {
+    font-size: 0.95rem;
+    margin-bottom: 2rem;
+  }
+
+  .unlock-form .input-group input {
+    padding: 0.875rem 1rem;
+  }
+
+  .unlock-button {
+    padding: 0.875rem 1.5rem;
+  }
+}
+
+// ── Embed Mode — Extra Compact Unlock ────────────────────────────────────────
+
+.embed-mode .story-unlock-overlay {
+  .unlock-content {
+    padding: 1.5rem;
+  }
+
+  .unlock-icon {
+    margin-bottom: 1rem;
+
+    svg {
+      width: 96px;
+      height: 144px;
+    }
+  }
+
+  .unlock-title {
+    font-size: 1.25rem;
+  }
+
+  .unlock-description {
+    font-size: 0.9rem;
+    margin-bottom: 1.5rem;
+  }
+}

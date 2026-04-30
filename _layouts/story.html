@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% if page.title %}{{ page.title }} | {% endif %}{{ site.title }}</title>
+
+  <!-- Bootstrap 5 CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+
+  <!-- Load language data with fallback to English -->
+  {% if site.telar_language and site.data.languages[site.telar_language] %}
+    {% assign lang = site.data.languages[site.telar_language] %}
+  {% else %}
+    {% assign lang = site.data.languages['en'] %}
+  {% endif %}
+
+  <!-- Check if Christmas Tree Mode is enabled in config -->
+  {% assign is_christmas_tree_mode = false %}
+  {% if site.development-features.christmas_tree_mode %}
+    {% assign is_christmas_tree_mode = true %}
+  {% endif %}
+
+  <!-- Check if step indicators should be shown -->
+  {% assign show_story_steps = true %}
+  {% if site.story_interface.show_story_steps == false %}
+    {% assign show_story_steps = false %}
+  {% endif %}
+
+  <!-- Check if story is encrypted (protected) -->
+  {% assign is_encrypted = false %}
+  {% if page.data_file %}
+    {% assign data_file_name = page.data_file %}
+    {% assign story_json = site.data[data_file_name] %}
+    {% if story_json.encrypted %}
+      {% assign is_encrypted = true %}
+    {% endif %}
+  {% endif %}
+
+  <script>
+  // Expose Christmas Tree Mode to JavaScript
+  window.christmasTreeMode = {{ is_christmas_tree_mode }};
+
+  // Expose language strings to JavaScript
+  window.telarLang = {
+    goDeeper: "{{ lang.buttons.go_deeper }}",
+    stepNumber: "{{ lang.story.step_number }}",
+    demoPanelBadge: "{{ lang.demo.panel_badge }}",
+    creditPrefix: "{{ lang.object.credit_prefix }}",
+    embedBanner: {
+      text: {{ lang.embed_banner.text | jsonify }},
+      link: "{{ lang.embed_banner.link }}"
+    }
+  };
+
+  // Expose config options to JavaScript
+  window.telarConfig = {
+    showObjectCredits: {{ site.story_interface.show_object_credits | default: false }},
+    viewer_preloading: {
+      max_viewer_cards: {{ site.development-features.viewer_preloading.max_viewer_cards | default: 8 }},
+      preload_steps: {{ site.development-features.viewer_preloading.preload_steps | default: 6 }},
+      loading_threshold: {{ site.development-features.viewer_preloading.loading_threshold | default: 5 }},
+      min_ready_viewers: {{ site.development-features.viewer_preloading.min_ready_viewers | default: 3 }}
+    },
+    cardPeekHeight: {{ site.card_peek_height | default: 1 }},
+    cardMessiness: {{ site.card_messiness | default: 20 }}
+  };
+
+  // If Christmas Tree Mode is active, add 🎄 to all warning headings
+  if (window.christmasTreeMode) {
+    document.addEventListener('DOMContentLoaded', function() {
+      document.querySelectorAll('.alert strong').forEach(function(heading) {
+        if (!heading.textContent.includes('🎄')) {
+          heading.textContent = '🎄 ' + heading.textContent;
+        }
+      });
+    });
+  }
+  </script>
+
+  <!-- Google Fonts - Dynamic based on theme -->
+  {% assign theme = site.data.themes[site.telar_theme] %}
+  {% assign heading_font = theme.fonts.headings | remove: "'" | split: ',' | first | strip %}
+  {% assign body_font = theme.fonts.body | remove: "'" | split: ',' | first | strip %}
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family={{ heading_font | replace: ' ', '+' }}:wght@400;700&family={{ body_font | replace: ' ', '+' }}:wght@300;400;600;700&display=swap" rel="stylesheet">
+
+
+
+  <!-- Embed Mode Detection (must load early) -->
+  <script src="{{ '/assets/js/embed.js' | relative_url }}"></script>
+
+  <!-- Custom CSS -->
+  <link rel="stylesheet" href="{{ '/assets/css/telar.css' | relative_url }}?v={{ site.telar.version }}">
+
+  {% seo %}
+</head>
+<body class="story-page">
+  <!-- Fixed navigation button: Back to Home on intro, Back to Start elsewhere -->
+  <nav aria-label="Site navigation">
+    <a href="{{ '/' | relative_url }}" class="btn-nav-back" id="btn-nav-back" data-home-url="{{ '/' | relative_url }}" data-home-text="{{ lang.buttons.back_to_home }}" data-start-text="{{ lang.buttons.back_to_start | default: 'Back to Start' }}">
+      <svg class="btn-nav-icon btn-nav-icon--home" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-6a2 2 0 0 1 2.582 0l7 6A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+      <svg class="btn-nav-icon btn-nav-icon--start" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg>
+      <span class="btn-nav-text">{{ lang.buttons.back_to_home }}</span>
+    </a>
+  </nav>
+
+  <!-- Fixed Share Button (hidden in embed mode, floats on right) -->
+  {% include share-button.html variant="icon-text" context="story" %}
+
+  <div class="scroll-surface" aria-hidden="true"></div>
+  <main class="story-container {% unless show_story_steps %}hide-step-indicators{% endunless %}">
+    <div class="card-stack">
+
+      <!-- Intro (z-index: 0 — covered by first viewer plate which is z-index 100) -->
+      <div class="story-intro{% if page.show_sections %} story-intro--toc{% endif %}" data-step="0" data-step-index="0" style="z-index: 0;">
+        <div class="intro-vignette"></div>
+        <div class="intro-floating-card">
+          {% if page.demo %}
+          <p class="intro-demo-label">{{ lang.story.demo_label }}</p>
+          {% endif %}
+          <h1 class="intro-title">{{ page.title }}</h1>
+          {% if page.subtitle %}
+          <h2 class="intro-subtitle">{{ page.subtitle }}</h2>
+          {% endif %}
+          {% if page.byline %}
+          <p class="intro-byline">{{ page.byline | markdownify | remove: '<p>' | remove: '</p>' }}</p>
+          {% endif %}
+          {% if page.description %}
+          <p class="intro-description">{{ page.description }}</p>
+          {% endif %}
+
+          {% if page.show_sections and page.data_file %}
+            {% assign data_name = page.data_file %}
+            {% assign story_steps = site.data[data_name] %}
+            {% assign section_cards = "" | split: "" %}
+            {% for s in story_steps %}
+              {% if s._metadata %}{% continue %}{% endif %}
+              {% assign obj = s.object | default: "" %}
+              {% if obj == "" and s.question %}
+                {% assign section_cards = section_cards | push: s %}
+              {% endif %}
+            {% endfor %}
+            {% if section_cards.size > 0 %}
+            <nav class="intro-toc" aria-label="Sections">
+              <p class="intro-toc-heading">{{ lang.story.sections_heading | default: "Sections" }}</p>
+              <ul>
+                {% for sc in section_cards %}
+                <li><a href="#s{{ sc.step }}" class="intro-toc-link" data-target-step="{{ sc.step }}">{{ sc.question }}</a></li>
+                {% endfor %}
+              </ul>
+            </nav>
+            {% endif %}
+          {% endif %}
+
+          {% if page.data_file %}
+            {% assign data_file_name = page.data_file %}
+            {% assign steps = site.data[data_file_name] %}
+            {% if steps.size > 0 and steps[0]._metadata %}
+              {% assign metadata = steps[0] %}
+              {% if metadata.viewer_warnings.size > 0 %}
+                <div class="alert alert-warning telar-alert mt-3" role="alert" style="text-align: left;">
+                  <strong>⚠️ {{ lang.story.config_issues_heading }}</strong>
+                  <p class="mb-2 mt-2">{{ lang.story.config_issues_heading }}</p>
+                  <ul class="mb-2">
+                  {% for warning in metadata.viewer_warnings %}
+                    <li>
+                      {% assign step_text = lang.story.step_number | replace: "{{ number }}", warning.step %}
+                      <strong>{{ step_text }}</strong>
+                      {% if warning.type == 'viewer' %}
+                        {{ lang.story.viewer_error_prefix }} {{ warning.message | markdownify | remove: '<p>' | remove: '</p>' | strip }}
+                      {% elsif warning.type == 'panel' %}
+                        {{ warning.message | markdownify | remove: '<p>' | remove: '</p>' | strip }}
+                      {% elsif warning.type == 'glossary' %}
+                        {{ lang.story.glossary_error_prefix }} {{ warning.message | markdownify | remove: '<p>' | remove: '</p>' | strip }}
+                      {% endif %}
+                    </li>
+                  {% endfor %}
+                  </ul>
+                  <p class="mb-0">{{ lang.story.preview_warning }}</p>
+                </div>
+              {% endif %}
+            {% endif %}
+          {% endif %}
+
+          <div class="intro-hint">
+            <small class="hint-desktop">{{ lang.story.scroll_hint }}</small>
+            <small class="hint-mobile">{{ lang.story.scroll_hint_mobile }}</small>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step data elements (hidden) — card-pool.js reads these at init to build visual cards -->
+      <div class="step-data" style="display:none;" aria-hidden="true">
+        {% if page.data_file %}
+          {% assign data_file_name = page.data_file %}
+          {% assign steps = site.data[data_file_name] %}
+          {% if is_encrypted %}
+            <!-- Steps will be rendered by JavaScript after decryption -->
+            <div id="encrypted-steps-container"></div>
+          {% else %}
+            {% for step in steps %}
+              {% unless step._metadata %}
+                {% include story-step.html
+                  step_number=step.step
+                  question=step.question
+                  answer=step.answer
+                  object_id=step.object
+                  x=step.x
+                  y=step.y
+                  zoom=step.zoom
+                  page=step.page
+                  layer1button=step.layer1_button
+                  layer1_title=step.layer1_title
+                  layer1_text=step.layer1_text
+                  layer2button=step.layer2_button
+                  layer2_title=step.layer2_title
+                  layer2_text=step.layer2_text
+                  clip_start=step.clip_start
+                  clip_end=step.clip_end
+                  loop=step.loop
+                  alt_text=step.alt_text
+                  viewer_warning=step.viewer_warning
+                  is_last=forloop.last
+                %}
+              {% endunless %}
+            {% endfor %}
+          {% endif %}
+        {% else %}
+          {{ content }}
+        {% endif %}
+      </div>
+
+    </div>
+  </main>
+
+  <!-- Step Counter -->
+  {% if show_story_steps %}
+  <div id="step-counter" class="step-counter d-none">
+    <small id="current-object-title"></small>
+  </div>
+  {% endif %}
+
+  <!-- Object Credits Badge -->
+  <div id="object-credits-badge" class="object-credits-badge d-none">
+    <span id="object-credits-text"></span>
+    <button id="object-credits-dismiss" class="credits-dismiss-btn" aria-label="Dismiss credits">&times;</button>
+  </div>
+
+  <!-- Panels -->
+  {% include panels.html %}
+
+  <!-- Share Panel -->
+  {% include share-panel.html %}
+
+  <!-- Bootstrap 5 JS Bundle -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+  <!-- Tify IIIF Viewer -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/tify@0.35.0/dist/tify.css">
+  <script type="module">
+    import Tify from 'https://cdn.jsdelivr.net/npm/tify@0.35.0/dist/tify.js';
+    window.Tify = Tify;
+  </script>
+
+  <!-- KaTeX for LaTeX rendering (loaded dynamically if story has LaTeX) -->
+  <script>
+    document.addEventListener("DOMContentLoaded", function() {
+      // Check after storyData is available
+      setTimeout(function() {
+        if (window.storyData && window.storyData.steps) {
+          var meta = window.storyData.steps[0];
+          if (meta && meta._metadata && meta.has_latex) {
+            // Load KaTeX CSS
+            var link = document.createElement('link');
+            link.rel = 'stylesheet';
+            link.href = 'https://cdn.jsdelivr.net/npm/katex@0.16.21/dist/katex.min.css';
+            document.head.appendChild(link);
+
+            // Load KaTeX scripts sequentially
+            var scripts = [
+              'https://cdn.jsdelivr.net/npm/katex@0.16.21/dist/katex.min.js',
+              'https://cdn.jsdelivr.net/npm/katex@0.16.21/dist/contrib/auto-render.min.js',
+              'https://cdn.jsdelivr.net/npm/katex@0.16.21/dist/contrib/mhchem.min.js'
+            ];
+
+            function loadNext(i) {
+              if (i >= scripts.length) {
+                var katexDelimiters = [
+                  { left: "$$", right: "$$", display: true },
+                  { left: "$", right: "$", display: false },
+                  { left: "\\(", right: "\\)", display: false },
+                  { left: "\\[", right: "\\]", display: true },
+                  { left: "\\begin{align}", right: "\\end{align}", display: true },
+                  { left: "\\begin{align*}", right: "\\end{align*}", display: true },
+                  { left: "\\begin{cases}", right: "\\end{cases}", display: true },
+                  { left: "\\begin{pmatrix}", right: "\\end{pmatrix}", display: true },
+                  { left: "\\begin{bmatrix}", right: "\\end{bmatrix}", display: true },
+                  { left: "\\begin{equation}", right: "\\end{equation}", display: true },
+                  { left: "\\begin{equation*}", right: "\\end{equation*}", display: true }
+                ];
+                window.telarRenderLatex = function(element) {
+                  if (typeof renderMathInElement === 'function') {
+                    renderMathInElement(element, {
+                      delimiters: katexDelimiters,
+                      throwOnError: false,
+                      trust: true
+                    });
+                  }
+                };
+                // Render LaTeX in step text already in the DOM
+                document.querySelectorAll('.story-step').forEach(function(el) {
+                  window.telarRenderLatex(el);
+                });
+                return;
+              }
+              var s = document.createElement('script');
+              s.src = scripts[i];
+              s.onload = function() { loadNext(i + 1); };
+              document.head.appendChild(s);
+            }
+            loadNext(0);
+          }
+        }
+      }, 0);
+    });
+  </script>
+
+  <!-- Telar Core -->
+  <script src="{{ '/assets/js/telar.js' | relative_url }}"></script>
+
+  <!-- Story-specific JavaScript -->
+  <script>
+    // Pass story data to JavaScript
+    {% if page.data_file %}
+    {% assign data_file_name = page.data_file %}
+    {% assign story_json = site.data[data_file_name] %}
+    {% if story_json.encrypted %}
+    // Story is encrypted - pass encrypted data
+    window.storyData = {{ story_json | jsonify }};
+    {% else %}
+    // Story is not encrypted - pass steps normally
+    {% assign first_step = story_json[0] %}
+    {% if first_step._metadata %}
+      {% assign first_step = story_json[1] %}
+    {% endif %}
+    window.storyData = {
+      steps: {{ story_json | jsonify }},
+      firstObject: "{{ first_step.object }}"
+    };
+    {% endif %}
+    {% else %}
+    window.storyData = {
+      steps: {{ page.steps | jsonify }},
+      firstObject: "{{ page.first_object }}"
+    };
+    {% endif %}
+
+    // Pass objects data for manifest lookup
+    window.objectsData = {{ site.data.objects | jsonify }};
+    {% if site.data.audio_objects %}
+    // Audio objects manifest: maps object_id → file extension (generated by process_audio.py)
+    window.audioObjects = {{ site.data.audio_objects | jsonify }};
+    {% endif %}
+  </script>
+  {% if is_encrypted %}
+  <script src="{{ '/assets/js/story-unlock.js' | relative_url }}"></script>
+  {% endif %}
+  <script src="{{ '/assets/js/telar-story.js' | relative_url }}"></script>
+  <script src="{{ '/assets/js/widgets.js' | relative_url }}"></script>
+
+  <!-- Share Panel JavaScript -->
+  <script src="{{ '/assets/js/share-panel.js' | relative_url }}"></script>
+
+  <!-- Story Unlock Overlay (for protected stories) - must be last for z-index -->
+  {% if is_encrypted %}
+  <div id="story-unlock-overlay" class="story-unlock-overlay d-none">
+    <div class="unlock-content">
+      <div class="unlock-icon">
+        <!-- Minimalist keyhole -->
+        <svg viewBox="0 0 48 72" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="24" cy="20" r="16" fill="#fff"/>
+          <path d="M17 32L10 68H38L31 32H17Z" fill="#fff"/>
+        </svg>
+      </div>
+      <h2 class="unlock-title">{{ lang.unlock.title | default: "This story is protected" }}</h2>
+      <p class="unlock-description">{{ lang.unlock.description | default: "The author has restricted access to this story. Enter the key to continue." }}</p>
+      <form id="unlock-form" class="unlock-form">
+        <div class="input-group">
+          <input type="password" id="unlock-key-input" placeholder="{{ lang.unlock.placeholder | default: 'Enter key' }}" autocomplete="off">
+          <button type="button" id="toggle-key-visibility" aria-label="Toggle key visibility">
+            <svg class="icon icon-eye" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
+        </div>
+        <div id="unlock-error" class="unlock-error d-none"></div>
+        <button type="submit" class="unlock-button">{{ lang.unlock.button | default: "Unlock" }}</button>
+      </form>
+      <a href="{{ '/' | relative_url }}" class="unlock-back-link">{{ lang.unlock.back_link | default: "← Back to stories" }}</a>
+    </div>
+  </div>
+  {% endif %}
+</body>
+</html>

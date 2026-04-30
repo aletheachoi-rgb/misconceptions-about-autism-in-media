@@ -1,0 +1,181 @@
+<!--
+  Layered Panel System
+  Panels are dynamically populated from chapter data
+-->
+
+<!-- Layer 1 Panel (Primary - Full-width offcanvas) -->
+<div class="offcanvas offcanvas-end" tabindex="-1" id="panel-layer1" data-bs-backdrop="false" data-telar-panel="layer1">
+  <div class="offcanvas-header">
+    <button type="button" class="btn btn-sm btn-outline-secondary" id="panel-layer1-back">
+      {{ lang.buttons.back }}
+    </button>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas"></button>
+  </div>
+  <div class="offcanvas-body">
+    <h1 class="offcanvas-title" id="panel-layer1-title">{{ lang.panels.default_title }}</h1>
+    <div id="panel-layer1-content">
+      <!-- Content populated by JavaScript -->
+    </div>
+  </div>
+</div>
+
+<!-- Layer 2 Panel (Secondary - Stacked on top of Layer 1) -->
+<div class="offcanvas offcanvas-end" tabindex="-1" id="panel-layer2" data-bs-backdrop="false" data-telar-panel="layer2">
+  <div class="offcanvas-header">
+    <button type="button" class="btn btn-sm btn-outline-secondary" id="panel-layer2-back">
+      {{ lang.buttons.back }}
+    </button>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas"></button>
+  </div>
+  <div class="offcanvas-body">
+    <h1 class="offcanvas-title" id="panel-layer2-title">{{ lang.panels.default_title }}</h1>
+    <div id="panel-layer2-content">
+      <!-- Content populated by JavaScript -->
+    </div>
+  </div>
+</div>
+
+<!-- Glossary Panel (Can appear from anywhere) -->
+<div class="offcanvas offcanvas-end" tabindex="-1" id="panel-glossary" data-bs-backdrop="false" data-telar-panel="glossary">
+  <div class="offcanvas-header">
+    <button type="button" class="btn btn-sm btn-outline-secondary" id="panel-glossary-back">
+      {{ lang.buttons.back }}
+    </button>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas"></button>
+  </div>
+  <div class="offcanvas-body">
+    <div class="glossary-term-prefix">{{ lang.panels.glossary_term_prefix }}:</div>
+    <h1 class="offcanvas-title" id="panel-glossary-title">{{ lang.panels.glossary_term_title }}</h1>
+    <div id="panel-glossary-content">
+      <!-- Content populated by JavaScript -->
+    </div>
+  </div>
+</div>
+
+<style>
+  /* Panel stacking z-indexes are in _panels.scss */
+
+  /* Glossary term prefix styling */
+  .glossary-term-prefix {
+    font-family: inherit;
+    font-size: 1em;
+    font-weight: 400;
+    opacity: 0.5;
+    margin-bottom: 0.25rem;
+  }
+
+  #panel-glossary-title {
+    margin-top: 0;
+  }
+
+  /* Panel content styling */
+  .offcanvas-body img {
+    max-width: 450px;  /* md - default */
+    max-height: 80vh;
+    height: auto;
+    display: block;
+    object-fit: contain;
+    border-radius: 4px;
+    margin: 1rem auto;
+  }
+
+  /* Image size modifiers */
+  .offcanvas-body img.img-sm {
+    max-width: 250px;
+  }
+
+  .offcanvas-body img.img-md {
+    max-width: 450px;
+  }
+
+  .offcanvas-body img.img-lg {
+    max-width: 700px;
+  }
+
+  .offcanvas-body img.img-full {
+    max-width: 100%;
+  }
+
+  .offcanvas-body p {
+    line-height: 1.8;
+    margin-bottom: 1rem;
+  }
+
+  /* Image error styling */
+  .offcanvas-body .img-error {
+    background-color: #fff3cd;
+    border: 1px solid #ffc107;
+    border-radius: 4px;
+    padding: 1rem;
+    margin: 1rem 0;
+    color: #856404;
+  }
+
+  .offcanvas-body .img-error code {
+    background-color: #ffe69c;
+    padding: 0.2em 0.4em;
+    border-radius: 3px;
+    font-size: 0.875em;
+  }
+
+  /* Mobile: override all image sizes to prevent overflow */
+  @media (max-width: 768px) {
+    .offcanvas-body img,
+    .offcanvas-body img.img-sm,
+    .offcanvas-body img.img-md,
+    .offcanvas-body img.img-lg {
+      max-width: 100% !important;
+    }
+  }
+</style>
+
+<script>
+  // Handle image loading errors in panels
+  document.addEventListener('DOMContentLoaded', function() {
+    // Add error handlers to existing images
+    document.querySelectorAll('.offcanvas-body img').forEach(function(img) {
+      img.addEventListener('error', function() {
+        handleImageError(this);
+      });
+    });
+
+    // Watch for new images added dynamically
+    const observer = new MutationObserver(function(mutations) {
+      mutations.forEach(function(mutation) {
+        mutation.addedNodes.forEach(function(node) {
+          if (node.tagName === 'IMG') {
+            node.addEventListener('error', function() {
+              handleImageError(this);
+            });
+          } else if (node.querySelectorAll) {
+            node.querySelectorAll('img').forEach(function(img) {
+              img.addEventListener('error', function() {
+                handleImageError(this);
+              });
+            });
+          }
+        });
+      });
+    });
+
+    // Observe all panel bodies for image additions
+    document.querySelectorAll('.offcanvas-body').forEach(function(body) {
+      observer.observe(body, { childList: true, subtree: true });
+    });
+  });
+
+  function handleImageError(img) {
+    // Only process once
+    if (img.dataset.errorHandled) return;
+    img.dataset.errorHandled = 'true';
+
+    const src = img.getAttribute('src') || '';
+    const errorDiv = document.createElement('div');
+    errorDiv.className = 'img-error';
+    errorDiv.innerHTML = '<strong>Image file not found:</strong> <code>' + src + '</code><br>' +
+                         'Please add this file or update the path in the markdown.';
+
+    // Replace image with error message
+    img.parentNode.replaceChild(errorDiv, img);
+  }
+</script>

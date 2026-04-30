@@ -1,0 +1,550 @@
+---
+layout: default
+---
+
+{% if site.telar_language and site.data.languages[site.telar_language] %}
+  {% assign lang = site.data.languages[site.telar_language] %}
+{% else %}
+  {% assign lang = site.data.languages['en'] %}
+{% endif %}
+
+<div class="container my-5">
+  <div class="row">
+    <div class="col-12">
+      <h1>{{ page.title }}</h1>
+    </div>
+    <div class="col-12">
+        <article class="page-content">
+          {{ content }}
+        </article>
+    </div>
+  </div>
+
+  {% if site.objects.size > 0 %}
+
+  {% comment %}Check browse_and_search setting (default: true if not explicitly set){% endcomment %}
+  {% if site.collection_interface.browse_and_search == false %}
+    {% assign browse_and_search = false %}
+  {% else %}
+    {% assign browse_and_search = site.collection_interface.browse_and_search | default: true %}
+  {% endif %}
+
+  {% comment %}Check for objects with warnings{% endcomment %}
+  {% assign objects_with_warnings = "" | split: "" %}
+  {% for object in site.objects %}
+    {% if object.object_warning and object.object_warning != "" %}
+      {% assign objects_with_warnings = objects_with_warnings | push: object %}
+    {% endif %}
+  {% endfor %}
+
+  {% if objects_with_warnings.size > 0 %}
+  <div class="row mb-4">
+    <div class="col-12">
+      <div class="alert alert-warning" role="alert" style="max-width: 800px;">
+        <strong>⚠️ Configuration Issues Detected</strong>
+        <p class="mb-2 mt-2"><small>The following objects have configuration issues:</small></p>
+        <ul class="mb-2" style="font-size: 0.9rem;">
+        {% assign shown_warnings = "" | split: "" %}
+        {% for object in objects_with_warnings %}
+          {% assign warning_short = object.object_warning_short | default: "" %}
+          {% assign use_long = true %}
+
+          {% comment %}Check if we've already shown this warning type{% endcomment %}
+          {% if warning_short != "" %}
+            {% for shown in shown_warnings %}
+              {% if shown == warning_short %}
+                {% assign use_long = false %}
+                {% break %}
+              {% endif %}
+            {% endfor %}
+
+            {% comment %}Add to shown warnings if using long version{% endcomment %}
+            {% if use_long %}
+              {% assign shown_warnings = shown_warnings | push: warning_short %}
+            {% endif %}
+          {% endif %}
+
+          <li>
+            <strong><a href="{{ object.url | relative_url }}" class="alert-link">{{ object.title }}</a>:</strong>
+            {% if use_long %}
+              {{ object.object_warning | markdownify | remove: '<p>' | remove: '</p>' | strip }}
+            {% else %}
+              {{ warning_short }}
+            {% endif %}
+          </li>
+        {% endfor %}
+        </ul>
+        <p class="mb-0"><small>These objects will fail to load in the viewer.</small></p>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  {% if browse_and_search %}
+  {% comment %}Browse and Search Layout Container{% endcomment %}
+  <div class="objects-layout">
+    {% comment %}Sidebar (desktop) / Top controls (mobile){% endcomment %}
+    <aside class="objects-sidebar">
+      {% comment %}Search input (always visible){% endcomment %}
+      <div class="objects-search-wrapper">
+        <input type="text"
+               class="objects-search-input"
+               id="objects-search-input"
+               placeholder="{{ lang.objects.search_placeholder | default: 'Search objects...' }}"
+               aria-label="{{ lang.objects.search_placeholder | default: 'Search objects' }}">
+        <button type="button" class="objects-search-clear" id="objects-search-clear" style="display: none;" aria-label="{{ lang.objects.clear_search | default: 'Clear search' }}">&times;</button>
+      </div>
+
+      {% comment %}Active filters (chips) - shown when filters are active{% endcomment %}
+      <div class="objects-active-filters" id="objects-sidebar-active-filters" style="display: none;">
+        <div class="objects-filter-chips" id="objects-sidebar-filter-chips"></div>
+        <button type="button" class="objects-clear-all" id="objects-sidebar-clear-all">{{ lang.objects.clear_all | default: "Clear all" }}</button>
+      </div>
+
+      {% comment %}Mobile: Collapsible wrapper / Desktop: Always visible{% endcomment %}
+      <div class="objects-filters-wrapper">
+        <button type="button" class="objects-filters-mobile-toggle" id="objects-filters-mobile-toggle" aria-expanded="false">
+          <span>{{ lang.objects.filter_by | default: "Filter by" }}</span>
+          <svg class="objects-filter-chevron" width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M2 4L6 8L10 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+
+        <div class="objects-filters-content" id="objects-filters-content">
+          <h3 class="objects-filter-heading">{{ lang.objects.filter_by | default: "Filter by" }}</h3>
+
+          {% comment %}Media type filter (auto-detected: Image/Video/Audio){% endcomment %}
+          <div class="objects-filter-section" data-filter="media_type">
+            <button type="button" class="objects-filter-section-toggle" aria-expanded="false">
+              <span>{{ lang.objects.media_type | default: "Type" }}</span>
+              <span class="objects-filter-indicator">+</span>
+            </button>
+            <div class="objects-filter-options">
+              {% comment %}Options populated by JavaScript{% endcomment %}
+            </div>
+          </div>
+
+          {% comment %}Medium/Genre filter (user-authored, was "Type"/object_type){% endcomment %}
+          <div class="objects-filter-section" data-filter="medium">
+            <button type="button" class="objects-filter-section-toggle" aria-expanded="false">
+              <span>{{ lang.objects.medium | default: "Medium/Genre" }}</span>
+              <span class="objects-filter-indicator">+</span>
+            </button>
+            <div class="objects-filter-options">
+              {% comment %}Options populated by JavaScript{% endcomment %}
+            </div>
+          </div>
+
+          {% comment %}Creator filter{% endcomment %}
+          <div class="objects-filter-section" data-filter="creator">
+            <button type="button" class="objects-filter-section-toggle" aria-expanded="false">
+              <span>{{ lang.objects.creator | default: "Creator" }}</span>
+              <span class="objects-filter-indicator">+</span>
+            </button>
+            <div class="objects-filter-options">
+              {% comment %}Options populated by JavaScript{% endcomment %}
+            </div>
+          </div>
+
+          {% comment %}Period filter{% endcomment %}
+          <div class="objects-filter-section" data-filter="period">
+            <button type="button" class="objects-filter-section-toggle" aria-expanded="false">
+              <span>{{ lang.objects.period | default: "Period" }}</span>
+              <span class="objects-filter-indicator">+</span>
+            </button>
+            <div class="objects-filter-options">
+              {% comment %}Options populated by JavaScript{% endcomment %}
+            </div>
+          </div>
+
+          {% comment %}Subjects filter{% endcomment %}
+          <div class="objects-filter-section" data-filter="subjects">
+            <button type="button" class="objects-filter-section-toggle" aria-expanded="false">
+              <span>{{ lang.objects.subjects | default: "Subjects" }}</span>
+              <span class="objects-filter-indicator">+</span>
+            </button>
+            <div class="objects-filter-options">
+              {% comment %}Options populated by JavaScript{% endcomment %}
+            </div>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    {% comment %}Main content area with results and grid{% endcomment %}
+    <div class="objects-main">
+      {% comment %}Results count, sort options, and active filters{% endcomment %}
+      <div class="objects-header">
+        <div class="objects-header-row">
+          <div class="objects-results-count">
+            {{ lang.objects.showing | default: "Showing" }} <span id="objects-visible-count">{{ site.objects.size }}</span> {{ lang.objects.of | default: "of" }} {{ site.objects.size }} {{ lang.objects.objects | default: "objects" }}
+          </div>
+          <div class="objects-sort">
+            <span class="objects-sort-label">{{ lang.objects.sort_by | default: "Sort by" }}:</span>
+            <button type="button" class="objects-sort-btn active" data-sort="title" data-direction="asc">
+              {{ lang.objects.sort_title | default: "Title" }}
+              <span class="objects-sort-arrow">↑</span>
+            </button>
+            <span class="objects-sort-divider">|</span>
+            <button type="button" class="objects-sort-btn" data-sort="year" data-direction="asc">
+              {{ lang.objects.sort_year | default: "Year" }}
+              <span class="objects-sort-arrow">↑</span>
+            </button>
+          </div>
+        </div>
+        <div class="objects-active-filters" id="objects-active-filters" style="display: none;">
+          <div class="objects-filter-chips" id="objects-filter-chips"></div>
+          <button type="button" class="objects-clear-all" id="objects-clear-all">{{ lang.objects.clear_all | default: "Clear all" }}</button>
+        </div>
+      </div>
+
+      <div class="collection-grid">
+    {% comment %}Sort objects: non-demo first, then demo, alphabetically within each group{% endcomment %}
+    {% assign non_demo_objects = site.objects | where_exp: "obj", "obj.demo != true" | sort: "title" %}
+    {% assign demo_objects = site.objects | where_exp: "obj", "obj.demo == true" | sort: "title" %}
+    {% assign sorted_objects = non_demo_objects | concat: demo_objects %}
+    {% for object in sorted_objects %}
+    <a href="{{ object.url | relative_url }}" class="collection-item{% if object.demo %} demo-object{% endif %}" data-object-id="{{ object.object_id }}"{% if browse_and_search %} data-media-type="{{ object.media_type | default: 'Image' }}" data-medium="{{ object.medium | default: object.object_type }}" data-creator="{{ object.creator }}" data-period="{{ object.period }}" data-subjects="{{ object.subjects }}" data-year="{{ object.year }}" data-title="{{ object.title }}" data-description="{{ object.description }}"{% endif %}>
+      {% if object.demo %}
+      <span class="demo-badge">{{ lang.demo.badge }}</span>
+      {% endif %}
+      <div class="collection-item-image" {% if object.iiif_manifest and object.iiif_manifest != "" %}data-iiif-manifest="{{ object.iiif_manifest }}"{% endif %}>
+        {% if object.media_type == 'Video' %}
+        {%- comment -%}Video thumbnail: play icon on neutral background{%- endcomment -%}
+        <div class="video-thumbnail" aria-label="Video">
+          <svg class="media-type-icon" xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="6 3 20 12 6 21 6 3"/></svg>
+        </div>
+        {% elsif object.media_type == 'Audio' %}
+        {%- comment -%}Audio thumbnail: speaker icon on neutral background{%- endcomment -%}
+        <div class="audio-thumbnail" aria-label="Audio">
+          <svg class="media-type-icon" xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
+        </div>
+        {% elsif object.thumbnail and object.thumbnail != "" %}
+        {%- comment -%}Use explicit thumbnail if provided{%- endcomment -%}
+        <img src="{{ object.thumbnail | relative_url }}" alt="{{ object.alt_text | default: object.title }}" class="iiif-thumbnail">
+        {% elsif object.iiif_manifest and object.iiif_manifest contains 'info.json' %}
+        {%- comment -%}For IIIF Image API, use standard thumbnail pattern{%- endcomment -%}
+        <img src="{{ object.iiif_manifest | replace: 'info.json', 'full/!400,400/0/default.jpg' }}" alt="{{ object.alt_text | default: object.title }}" class="iiif-thumbnail">
+        {% elsif object.iiif_manifest and object.iiif_manifest != "" %}
+        {%- comment -%}For IIIF manifests, JavaScript will load thumbnail{%- endcomment -%}
+        <div class="manifest-thumbnail-placeholder bg-light d-flex align-items-center justify-content-center" style="height: 250px;">
+          <span class="text-muted">Loading...</span>
+        </div>
+        {% elsif object.object_id %}
+        {%- comment -%}For local objects, load thumbnail via info.json{%- endcomment -%}
+        <div class="local-iiif-thumbnail" data-info-json="{{ '/iiif/objects/' | append: object.object_id | append: '/info.json' | relative_url }}">
+          <div class="manifest-thumbnail-placeholder bg-light d-flex align-items-center justify-content-center" style="height: 250px;">
+            <span class="text-muted">Loading...</span>
+          </div>
+        </div>
+        {% else %}
+        <div class="placeholder-image bg-secondary d-flex align-items-center justify-content-center" style="height: 250px;">
+          <span class="text-white">No image</span>
+        </div>
+        {% endif %}
+      </div>
+      <h3>{{ object.title }}</h3>
+      {% if object.period %}
+      <p class="text-muted mb-0">{{ object.period }}</p>
+      {% endif %}
+      {% if object.creator %}
+      <p class="text-muted mb-0">{{ object.creator }}</p>
+      {% endif %}
+    </a>
+    {% endfor %}
+      </div>
+    </div>
+  </div>
+  {% else %}
+  {% comment %}Simple grid without browse/search{% endcomment %}
+  <div class="collection-grid">
+    {% assign non_demo_objects = site.objects | where_exp: "obj", "obj.demo != true" | sort: "title" %}
+    {% assign demo_objects = site.objects | where_exp: "obj", "obj.demo == true" | sort: "title" %}
+    {% assign sorted_objects = non_demo_objects | concat: demo_objects %}
+    {% for object in sorted_objects %}
+    <a href="{{ object.url | relative_url }}" class="collection-item{% if object.demo %} demo-object{% endif %}" data-object-id="{{ object.object_id }}">
+      {% if object.demo %}
+      <span class="demo-badge">{{ lang.demo.badge }}</span>
+      {% endif %}
+      <div class="collection-item-image" {% if object.iiif_manifest and object.iiif_manifest != "" %}data-iiif-manifest="{{ object.iiif_manifest }}"{% endif %}>
+        {% if object.media_type == 'Video' %}
+        <div class="video-thumbnail" aria-label="Video">
+          <svg class="media-type-icon" xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="6 3 20 12 6 21 6 3"/></svg>
+        </div>
+        {% elsif object.media_type == 'Audio' %}
+        <div class="audio-thumbnail" aria-label="Audio">
+          <svg class="media-type-icon" xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
+        </div>
+        {% elsif object.thumbnail and object.thumbnail != "" %}
+        <img src="{{ object.thumbnail | relative_url }}" alt="{{ object.alt_text | default: object.title }}" class="iiif-thumbnail">
+        {% elsif object.iiif_manifest and object.iiif_manifest contains 'info.json' %}
+        <img src="{{ object.iiif_manifest | replace: 'info.json', 'full/!400,400/0/default.jpg' }}" alt="{{ object.alt_text | default: object.title }}" class="iiif-thumbnail">
+        {% elsif object.iiif_manifest and object.iiif_manifest != "" %}
+        <div class="manifest-thumbnail-placeholder bg-light d-flex align-items-center justify-content-center" style="height: 250px;">
+          <span class="text-muted">Loading...</span>
+        </div>
+        {% elsif object.object_id %}
+        <div class="local-iiif-thumbnail" data-info-json="{{ '/iiif/objects/' | append: object.object_id | append: '/info.json' | relative_url }}">
+          <div class="manifest-thumbnail-placeholder bg-light d-flex align-items-center justify-content-center" style="height: 250px;">
+            <span class="text-muted">Loading...</span>
+          </div>
+        </div>
+        {% else %}
+        <div class="placeholder-image bg-secondary d-flex align-items-center justify-content-center" style="height: 250px;">
+          <span class="text-white">No image</span>
+        </div>
+        {% endif %}
+      </div>
+      <h3>{{ object.title }}</h3>
+      {% if object.period %}
+      <p class="text-muted mb-0">{{ object.period }}</p>
+      {% endif %}
+      {% if object.creator %}
+      <p class="text-muted mb-0">{{ object.creator }}</p>
+      {% endif %}
+    </a>
+    {% endfor %}
+  </div>
+  {% endif %}
+  {% else %}
+  {%- comment -%}Only show "no objects" message if collections aren't intentionally skipped{%- endcomment -%}
+  {% assign dev_features = site['development-features'] %}
+  {%- comment -%}Support both new name (skip_collections) and legacy name (hide_collections){%- endcomment -%}
+  {% assign skip_collections = dev_features.skip_collections | default: dev_features.hide_collections | default: false %}
+  {% unless skip_collections %}
+  <div class="row">
+    <div class="col-12">
+      <div class="alert alert-info">
+        <p class="mb-0">No objects in the collection yet. Add object files to the <code>_objects/</code> directory to populate the collection.</p>
+      </div>
+    </div>
+  </div>
+  {% endunless %}
+  {% endif %}
+</div>
+
+<script>
+/**
+ * Pick a thumbnail size from the IIIF sizes array.
+ * Returns the smallest size >= minWidth, or the largest available.
+ */
+function pickThumbnailSize(sizes, minWidth) {
+  if (!sizes || sizes.length === 0) return null;
+  minWidth = minWidth || 400;
+  var sorted = sizes.slice().sort(function(a, b) { return a.width - b.width; });
+  for (var i = 0; i < sorted.length; i++) {
+    if (sorted[i].width >= minWidth) return sorted[i];
+  }
+  return sorted[sorted.length - 1];
+}
+
+/**
+ * Upgrade IIIF Image API thumbnail URLs to a larger size.
+ * Detects URLs with /full/{size}/0/default.{ext} pattern and replaces
+ * the size segment with !600,600 for sharper gallery thumbnails.
+ */
+function upgradeIIIFThumbnailUrl(url) {
+  // Match IIIF Image API pattern: .../full/{size}/0/default.{ext}
+  // The size segment may contain backslash-escaped ! (e.g. Rumsey \!96,96)
+  // or double slashes from stripped backslashes. Handle all variants.
+  var match = url.match(/^(.*\/full\/)[\\\/]*([^/]+)(\/0\/default\.\w+)$/);
+  if (match) {
+    return match[1] + '!600,600' + match[3];
+  }
+  return url;
+}
+
+/**
+ * Load thumbnails from IIIF manifests and info.json
+ */
+document.addEventListener('DOMContentLoaded', function() {
+  // Upgrade explicit IIIF thumbnail URLs to larger sizes (with fallback for Level 0 servers)
+  var iiifThumbs = document.querySelectorAll('img.iiif-thumbnail');
+  iiifThumbs.forEach(function(img) {
+    var originalSrc = img.src;
+    var upgradedSrc = upgradeIIIFThumbnailUrl(originalSrc);
+    if (upgradedSrc !== originalSrc) {
+      img.dataset.originalSrc = originalSrc;
+      img.onerror = function() {
+        if (this.dataset.originalSrc) {
+          this.src = this.dataset.originalSrc;
+          delete this.dataset.originalSrc;
+          this.onerror = null;
+        }
+      };
+      img.src = upgradedSrc;
+    }
+  });
+  // Handle local IIIF thumbnails from info.json
+  const localItems = document.querySelectorAll('.local-iiif-thumbnail[data-info-json]');
+  localItems.forEach(function(item) {
+    const infoUrl = item.getAttribute('data-info-json');
+
+    fetch(infoUrl)
+      .then(response => response.json())
+      .then(info => {
+        // Get the largest available size from sizes array (first element)
+        const sizes = info.sizes || [];
+        let thumbnailSize = pickThumbnailSize(sizes);
+
+        if (thumbnailSize) {
+          const baseUrl = info.id || info['@id'];
+          // Use base URL directly - it already points to the image service
+          const thumbnailUrl = `${baseUrl}/full/${thumbnailSize.width},${thumbnailSize.height}/0/default.jpg`;
+
+          const img = document.createElement('img');
+          img.src = thumbnailUrl;
+          img.alt = item.closest('.collection-item').querySelector('h3').textContent;
+
+          const placeholder = item.querySelector('.manifest-thumbnail-placeholder');
+          if (placeholder) {
+            placeholder.replaceWith(img);
+          }
+        }
+      })
+      .catch(error => {
+        console.error('Error loading IIIF info.json:', infoUrl, error);
+        const placeholder = item.querySelector('.manifest-thumbnail-placeholder');
+        if (placeholder) {
+          placeholder.innerHTML = '<span class="text-danger">Failed to load</span>';
+        }
+      });
+  });
+
+  // Handle external IIIF manifest thumbnails
+  const items = document.querySelectorAll('.collection-item-image[data-iiif-manifest]');
+
+  items.forEach(function(item) {
+    const manifestUrl = item.getAttribute('data-iiif-manifest');
+
+    // Skip if it's an Image API info.json (handled in template)
+    if (manifestUrl.includes('info.json')) {
+      return;
+    }
+
+    // Fetch manifest to extract larger canvas image
+    fetch(manifestUrl)
+      .then(response => response.json())
+      .then(manifest => {
+        let imageServiceUrl = null;
+        let imageServiceProfile = null;
+        let fallbackImageUrl = null;
+
+        // IIIF Presentation API 2.1
+        if (manifest.sequences && manifest.sequences[0] && manifest.sequences[0].canvases) {
+          const firstCanvas = manifest.sequences[0].canvases[0];
+          if (firstCanvas && firstCanvas.images && firstCanvas.images[0]) {
+            const resource = firstCanvas.images[0].resource;
+
+            // Try to get image service for resizing
+            if (resource.service) {
+              const service = Array.isArray(resource.service) ? resource.service[0] : resource.service;
+              imageServiceUrl = service['@id'] || service.id;
+              imageServiceProfile = service.profile;
+            }
+
+            // Fallback to full image URL
+            if (!imageServiceUrl && resource['@id']) {
+              fallbackImageUrl = resource['@id'];
+            }
+          }
+        }
+        // IIIF Presentation API 3.0
+        else if (manifest.items && manifest.items[0]) {
+          const firstCanvas = manifest.items[0];
+          if (firstCanvas.items && firstCanvas.items[0] && firstCanvas.items[0].items) {
+            const annotationBody = firstCanvas.items[0].items[0].body;
+
+            // Try to get image service for resizing
+            if (annotationBody.service && annotationBody.service.length > 0) {
+              imageServiceUrl = annotationBody.service[0].id || annotationBody.service[0]['@id'];
+              imageServiceProfile = annotationBody.service[0].profile;
+            }
+
+            // Fallback to full image URL
+            if (!imageServiceUrl && annotationBody.id) {
+              fallbackImageUrl = annotationBody.id;
+            }
+          }
+        }
+
+        const isLevel0 = imageServiceProfile && (
+          imageServiceProfile === 'level0' ||
+          imageServiceProfile === 'http://iiif.io/api/image/2/level0.json'
+        );
+
+        // Level 0: fetch info.json to get available sizes
+        if (imageServiceUrl && isLevel0) {
+          imageServiceUrl = imageServiceUrl.replace(/\/$/, '');
+          fetch(`${imageServiceUrl}/info.json`)
+            .then(r => r.json())
+            .then(info => {
+              const sizes = info.sizes || [];
+              const largest = sizes.length > 0 ? sizes[sizes.length - 1] : null;
+              let thumbnailUrl = largest
+                ? `${imageServiceUrl}/full/${largest.width},${largest.height}/0/default.jpg`
+                : fallbackImageUrl;
+
+              if (thumbnailUrl) {
+                const img = document.createElement('img');
+                img.src = thumbnailUrl;
+                img.alt = item.closest('.collection-item').querySelector('h3').textContent;
+                img.className = 'iiif-thumbnail';
+                const placeholder = item.querySelector('.manifest-thumbnail-placeholder');
+                if (placeholder) placeholder.replaceWith(img);
+              }
+            })
+            .catch(() => {
+              if (fallbackImageUrl) {
+                const img = document.createElement('img');
+                img.src = fallbackImageUrl;
+                img.alt = item.closest('.collection-item').querySelector('h3').textContent;
+                img.className = 'iiif-thumbnail';
+                const placeholder = item.querySelector('.manifest-thumbnail-placeholder');
+                if (placeholder) placeholder.replaceWith(img);
+              }
+            });
+        }
+        // Level 1+: request arbitrary size
+        else if (imageServiceUrl) {
+          imageServiceUrl = imageServiceUrl.replace(/\/$/, '');
+          const thumbnailUrl = `${imageServiceUrl}/full/!400,400/0/default.jpg`;
+          const img = document.createElement('img');
+          img.src = thumbnailUrl;
+          img.alt = item.closest('.collection-item').querySelector('h3').textContent;
+          img.className = 'iiif-thumbnail';
+          const placeholder = item.querySelector('.manifest-thumbnail-placeholder');
+          if (placeholder) placeholder.replaceWith(img);
+        }
+        // No image service — use fallback directly
+        else if (fallbackImageUrl) {
+          const img = document.createElement('img');
+          img.src = fallbackImageUrl;
+          img.alt = item.closest('.collection-item').querySelector('h3').textContent;
+          img.className = 'iiif-thumbnail';
+          const placeholder = item.querySelector('.manifest-thumbnail-placeholder');
+          if (placeholder) placeholder.replaceWith(img);
+        } else {
+          console.warn('No image found in manifest:', manifestUrl);
+          const placeholder = item.querySelector('.manifest-thumbnail-placeholder');
+          if (placeholder) {
+            placeholder.innerHTML = '<span class="text-muted">No image</span>';
+          }
+        }
+      })
+      .catch(error => {
+        console.error('Error loading manifest thumbnail:', manifestUrl, error);
+        // Show error placeholder
+        const placeholder = item.querySelector('.manifest-thumbnail-placeholder');
+        if (placeholder) {
+          placeholder.innerHTML = '<span class="text-danger">Failed to load</span>';
+        }
+      });
+  });
+});
+</script>
+
+{% if browse_and_search %}
+<script src="{{ '/assets/js/lunr.min.js' | relative_url }}"></script>
+<script src="{{ '/assets/js/objects-filter.js' | relative_url }}"></script>
+{% endif %}
