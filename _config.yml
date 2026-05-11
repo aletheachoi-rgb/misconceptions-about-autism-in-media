@@ -235,3 +235,6 @@ development-features:
   # Use this when building a site with only custom pages (no stories or objects)
   # (Backward compatible: hide_collections also supported)
   skip_collections: false
+email: ""
+story_key: 
+collection_mode: false

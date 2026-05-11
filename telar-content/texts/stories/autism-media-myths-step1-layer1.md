@@ -1,0 +1,1 @@
+This section introduces the idea that media often teaches audiences to recognize only a limited version of autism.
