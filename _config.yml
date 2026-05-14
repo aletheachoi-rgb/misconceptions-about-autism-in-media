@@ -9,7 +9,7 @@ baseurl: "/misconceptions-about-autism-in-media"
 author: "Ally Choi"
 telar_theme: "santa-barbara" # Options: paisajes, neogranadina, santa-barbara, austin, trama, or custom
 logo: ""
-telar_language: "en"
+telar_language: en
 
 # Google Sheets Integration
 # See https://telar.org/docs/your-data/google-sheets/ for detailed setup instructions.
