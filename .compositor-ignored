@@ -1,0 +1,5 @@
+# .compositor-ignored — story IDs the compositor will not
+# resurface as orphans on import. Managed by the compositor
+# Compositor ignored-story IDs; safe to hand-edit (one ID per line; `#` comments).
+blank_template
+plantilla_en_blanco
