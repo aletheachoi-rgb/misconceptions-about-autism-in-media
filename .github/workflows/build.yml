@@ -130,7 +130,7 @@ jobs:
 
       - name: Restore audio data from cache
         id: cache-audio
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@v6
         with:
           path: cached-audio/
           key: audio-data-${{ hashFiles('telar-content/objects/*.mp3', 'telar-content/objects/*.ogg', 'telar-content/objects/*.m4a', 'telar-content/spreadsheets/objects.csv') }}
@@ -191,7 +191,7 @@ jobs:
 
       - name: Save audio data to cache
         if: steps.detect-audio-changes.outputs.needs_audio == 'true'
-        uses: actions/cache/save@v5
+        uses: actions/cache/save@v6
         with:
           path: cached-audio/
           key: audio-data-${{ hashFiles('telar-content/objects/*.mp3', 'telar-content/objects/*.ogg', 'telar-content/objects/*.m4a', 'telar-content/spreadsheets/objects.csv') }}
@@ -214,7 +214,7 @@ jobs:
 
       - name: Restore IIIF tiles from cache
         id: cache-iiif
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@v6
         with:
           path: cached-iiif/
           # v0.5.0: Flattened image directory structure - now all images in telar-content/objects/
@@ -317,7 +317,7 @@ jobs:
 
       - name: Save IIIF tiles to cache
         if: steps.detect-changes.outputs.needs_iiif == 'true'
-        uses: actions/cache/save@v5
+        uses: actions/cache/save@v6
         with:
           path: cached-iiif/
           # v0.5.0: Flattened image directory structure
